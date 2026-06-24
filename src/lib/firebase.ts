@@ -8,13 +8,13 @@ import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { getFunctions, type Functions } from "firebase/functions";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCpt5LYGh-4fvO9AFmuY5rlv-LKUDICrHs",
-  authDomain: "x3c-app.firebaseapp.com",
-  projectId: "x3c-app",
-  storageBucket: "x3c-app.firebasestorage.app",
-  messagingSenderId: "755689959485",
-  appId: "1:755689959485:web:0f42f0a83a7fe26514ba54",
-  measurementId: "G-NZ4264PTYH",
+  apiKey: "AIzaSyCZI9Vyx6e1LCZi2SAP-O_M2y6WuHpkgFo",
+  authDomain: "x3-communi.firebaseapp.com",
+  projectId: "x3-communi",
+  storageBucket: "x3-communi.firebasestorage.app",
+  messagingSenderId: "641156177771",
+  appId: "1:641156177771:web:25a7fb32ea2878e243b62e",
+  measurementId: "G-X7XDHGXMLC",
 };
 
 export const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);

@@ -42,8 +42,15 @@ async function ensureSeedAuth(append: (msg: string, kind?: LogLine["kind"]) => v
     append(`Signed in as ${BOOTSTRAP_ADMIN_EMAIL} so Firestore writes are authenticated.`, "ok");
     return true;
   } catch (err) {
-    append(`Auto sign-in skipped: ${(err as Error).message}`, "info");
-    return false;
+    append(`Auto sign-in failed: ${(err as Error).message}. Trying to register bootstrap admin...`, "info");
+    try {
+      await createUserWithEmailAndPassword(auth, BOOTSTRAP_ADMIN_EMAIL, DEFAULT_DEMO_PASSWORD);
+      append(`Successfully registered and signed in as ${BOOTSTRAP_ADMIN_EMAIL}.`, "ok");
+      return true;
+    } catch (regErr) {
+      append(`Registration failed: ${(regErr as Error).message}`, "err");
+      return false;
+    }
   }
 }
 
@@ -122,7 +129,25 @@ function AdminSeedPage() {
       }
     } catch (cloudErr) {
       errors++;
-      append(`Cloud Sync failed: ${(cloudErr as Error).message}`, "err");
+      append(`Cloud Sync failed (Cloud Functions might not be deployed): ${(cloudErr as Error).message}`, "err");
+      append("Attempting to write user profiles directly to Firestore as fallback...", "info");
+      const writeResults = await Promise.all(
+        seedUsers.map(async (u) => {
+          try {
+            await upsertUserProfile(u);
+            return true;
+          } catch (localErr) {
+            errors++;
+            append(`Failed to write profile for ${u.name}: ${(localErr as Error).message}`, "err");
+            return false;
+          }
+        })
+      );
+      const localWritten = writeResults.filter(Boolean).length;
+      if (localWritten > 0) {
+        append(`Fallback: Wrote ${localWritten} user profiles directly to Firestore.`, "ok");
+        profilesWritten = localWritten;
+      }
     }
 
     append(
@@ -205,6 +230,51 @@ function AdminSeedPage() {
     setRunning(false);
   }
 
+  async function seedAuthUsers() {
+    if (!window.confirm("Register all mock users in Firebase Authentication? This might take a minute...")) return;
+    setRunning(true);
+    setLog([]);
+    append("Starting client-side Auth seeding for users...", "info");
+    
+    let created = 0;
+    let existing = 0;
+    let failed = 0;
+    
+    const uniqueUsers = Array.from(new Map(users.map(u => [u.email.toLowerCase(), u])).values());
+    
+    for (let i = 0; i < uniqueUsers.length; i++) {
+      const u = uniqueUsers[i];
+      if (!u.email) continue;
+      
+      append(`[${i + 1}/${uniqueUsers.length}] Registering ${u.name} (${u.email})...`, "info");
+      
+      try {
+        await createUserWithEmailAndPassword(auth, u.email, DEFAULT_DEMO_PASSWORD);
+        created++;
+      } catch (err: any) {
+        if (err.code === "auth/email-already-in-use" || err.message?.includes("email-already-in-use")) {
+          existing++;
+        } else {
+          failed++;
+          append(`Failed to register ${u.name}: ${err.message}`, "err");
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    
+    append(`Auth Seeding Done! Created: ${created}, Already Exists: ${existing}, Failed: ${failed}.`, "ok");
+    
+    try {
+      append(`Restoring Admin session (Charlie Tran)...`, "info");
+      await signInWithEmailAndPassword(auth, BOOTSTRAP_ADMIN_EMAIL, DEFAULT_DEMO_PASSWORD);
+      append("Admin session restored successfully.", "ok");
+    } catch (err: any) {
+      append(`Failed to restore Admin session: ${err.message}`, "err");
+    }
+    
+    setRunning(false);
+  }
+
   async function quickSignIn(email: string) {
     try {
       await signInWithEmailAndPassword(auth, email, DEFAULT_DEMO_PASSWORD);
@@ -272,6 +342,13 @@ function AdminSeedPage() {
           className="h-12 rounded-md border border-primary/60 px-4 text-xs font-bold uppercase tracking-wider text-primary"
         >
           Reset crew passwords (email link)
+        </button>
+        <button
+          onClick={seedAuthUsers}
+          disabled={running}
+          className="h-12 rounded-md border border-dashed border-success/60 px-4 text-xs font-bold uppercase tracking-wider text-success hover:bg-success/10"
+        >
+          Register All Users (Auth)
         </button>
       </div>
 
